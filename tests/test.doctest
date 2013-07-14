@@ -1,0 +1,204 @@
+Feedme Command Tests
+====================
+
+Infrastructure
+--------------
+
+This ``run`` command allows us to run the ``feedme`` command and capture the
+results such that doctest can check them:
+
+    >>> import os
+    >>> from subprocess import Popen, PIPE
+    >>> def run(cmd):
+    ...     p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
+    ...     rc = p.wait()
+    ...     print(p.stdout.read().decode(), end='')
+    ...     errs = p.stderr.read()
+    ...     if errs:
+    ...         print('------------')
+    ...         print(errs.decode(), end='')
+    ...     return rc if rc else None
+
+We'll be creating a test database, so we need to make sure it doesn't exist at
+the start of the run (we'll delete it at the end, but if a test run fails it
+will be left in place):
+
+    >>> DBPATH = '/home/rdmurray/src/feedme/testdb.sqlite'
+    >>> if os.path.exists(DBPATH):
+    ...     os.remove(DBPATH)
+
+Note that the above hardcoded path will need to be fixed before release;
+I'm too lazy to bother with it at this stage.
+
+Although the feedparser docs show URLs at feedparser.org that are supposed
+to serve the examples used in the docs, that domain appears to have lapsed.
+In any case, we also need our own test files.  To serve them, we will spawn
+a web server thread pointing to the ``testdata`` subdirectory of our
+``tests`` directory:
+
+    >>> import sys
+    >>> import threading
+    >>> import mimetypes
+    >>> from wsgiref import simple_server, util
+    >>> class NoLoggingHandler(simple_server.WSGIRequestHandler):
+    ...     def log_message(*args, **kw): pass
+    >>> # XXX: This next line is fragile...fix it.
+    >>> examples_path = os.path.join(os.path.split(sys.argv[-1])[0], 'testdata')
+    >>> def app(environ, respond):
+    ...     fn = os.path.join(examples_path, environ['PATH_INFO'][1:])
+    ...     if '.' not in fn.split(os.path.sep)[-1]:
+    ...         fn = os.path.join(fn, 'index.html')
+    ...     type = mimetypes.guess_type(fn)[0]
+    ...     if os.path.exists(fn):
+    ...         respond('200 OK', [('Content-Type', type)])
+    ...         return util.FileWrapper(open(fn, "rb"))
+    ...     else:
+    ...         respond('404 Not Found', [('Content-Type', 'text/plain')])
+    ...         return ['not found']
+    >>> examples_server = simple_server.make_server('', 0, app,
+    ...                                             handler_class=NoLoggingHandler)
+    >>> examples_server_thread = threading.Thread(target=examples_server.serve_forever,
+    ...                                           daemon=True)
+    >>> examples_server_thread.start()
+
+Because this is marked as a daemon thread, it will shut down when the doctest
+ends, regardless of whether or not there were any errors.
+
+Here's a function that takes the relative path to a file from the testdata
+directory and returns the URL needed to access it through our examples server:
+
+    >>> def example_url(fn):
+    ...     return 'http://127.0.0.1:{}/{}'.format(examples_server.server_port,
+    ...                                            fn)
+
+
+Initializing the Database
+-------------------------
+
+To use feedly you first need to initialize the database.  This creates the
+necessary (empty) tables:
+
+    >>> run('feedme init')
+    Database initialized
+
+We can see, for example that the list of feeds exists, but is empty:
+
+    >>> run('feedme listfeeds -a')
+    +----+-------+----------+---------+-----+
+    | id | title | subtitle | pubdate | url |
+    +----+-------+----------+---------+-----+
+    +----+-------+----------+---------+-----+
+
+Once initialized, it is an error to run the ``init`` command again:
+
+    >>> run('feedme init')                  # doctest: +ELLIPSIS
+    ------------
+    Traceback (most recent call last):
+      ...
+    ValueError: database relation type already set
+    1
+
+(Note that I hereby declare that this particular error class and message is not
+part of the API, and will probably change at some point.)
+
+See below for how to re-initialize the database.
+
+
+Adding a Feed
+-------------
+
+The first step in using feedme is to add a feed to the database.  We do this
+using the ``addfeed`` subcommand, which takes the URL of the feed as its only
+argument:
+
+    >>> run('feedme addfeed ' + example_url('rss20.xml'))       # doctest: +ELLIPSIS
+    Added new feed:
+    +----+-------------+---------------------------------+----------------------------+------------------...-----------+
+    | id | title       | subtitle                        | published                  | url              ...           |
+    +----+-------------+---------------------------------+----------------------------+------------------...-----------+
+    | 1  | Sample Feed | For documentation <em>only</em> | 2002-09-07 00:00:01.000005 | http://127.0.0.1:.../rss20.xml |
+    +----+-------------+---------------------------------+----------------------------+------------------...-----------+
+
+The feed is now in the feed table:
+
+    >>> run('feedme listfeeds -a')                              # doctest: +ELLIPSIS
+    +----+-------------+---------------------------------+----------------------------+------------------...-----------+
+    | id | title       | subtitle                        | pubdate                    | url              ...           |
+    +----+-------------+---------------------------------+----------------------------+------------------...-----------+
+    | 1  | Sample Feed | For documentation <em>only</em> | 2002-09-07 00:00:01.000005 | http://127.0.0.1:.../rss20.xml |
+    +----+-------------+---------------------------------+----------------------------+------------------...-----------+
+
+Once a feed has been entered, it is an error to enter it again:
+
+    >>> run('feedme addfeed ' + example_url('rss20.xml'))       # doctest: +ELLIPSIS
+    Feed already exists in database: http://127.0.0.1:.../rss20.xml
+
+Note that this is a strict match on the URL, so if you have two URLs that
+differ only in optional portions but otherwise point to the same feed, you
+will be able to add both.  That is, feedly only checks the URL, not the
+feed title or any other attributes.  This is necessary because there is
+no more accurate way to unambiguously identify a feed.
+
+
+Reinitializing the Database
+---------------------------
+
+In production you'd never use this, but the ``init`` method has an ``-r``
+option that allows you to wipe the existing database and start fresh:
+
+    >>> run('feedme init -r')
+    Database cleared
+    Database reinitialized
+    >>> run('feedme listfeeds -a')
+    +----+-------+----------+---------+-----+
+    | id | title | subtitle | pubdate | url |
+    +----+-------+----------+---------+-----+
+    +----+-------+----------+---------+-----+
+    >>> run('feedme addfeed ' + example_url('rss20.xml'))       # doctest: +ELLIPSIS
+    Added new feed:
+    +----+-------------+---------------------------------+----------------------------+------------------...-----------+
+    | id | title       | subtitle                        | published                  | url              ...           |
+    +----+-------------+---------------------------------+----------------------------+------------------...-----------+
+    | 1  | Sample Feed | For documentation <em>only</em> | 2002-09-07 00:00:01.000005 | http://127.0.0.1:.../rss20.xml |
+    +----+-------------+---------------------------------+----------------------------+------------------...-----------+
+    >>> run('feedme listfeeds -a')                              # doctest: +ELLIPSIS
+    +----+-------------+---------------------------------+----------------------------+------------------...-----------+
+    | id | title       | subtitle                        | pubdate                    | url              ...           |
+    +----+-------------+---------------------------------+----------------------------+------------------...-----------+
+    | 1  | Sample Feed | For documentation <em>only</em> | 2002-09-07 00:00:01.000005 | http://127.0.0.1:.../rss20.xml |
+    +----+-------------+---------------------------------+----------------------------+------------------...-----------+
+
+
+The Article List
+----------------
+
+When the feed is initially added, the list of current articles is added to the
+database.  (We'll see how to update the list with new articles below.)  The
+list of articles can be show via the ``listarticles`` command, which takes
+a feed id as its argument:
+
+    >>> run('feedme listarticles 1')
+    +----------------------------+-------------------+-------+
+    | pubdate                    | title             | read  |
+    +----------------------------+-------------------+-------+
+    | 2002-09-05 00:00:01.000003 | First entry title | False |
+    +----------------------------+-------------------+-------+
+
+
+Development Test Area
+---------------------
+
+This is stuff that I'm playing with that hasn't been finalized.
+
+
+Cleanup
+-------
+
+Get rid of the test database:
+
+    >>> os.remove(DBPATH)
+
+Shut down the example server.
+
+    >>> examples_server.shutdown()
+    >>> examples_server_thread.join()
