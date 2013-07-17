@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2013 by R. David Murray under an MIT license.
 import os
 import operator
 import functools
@@ -6,18 +7,20 @@ import contextlib
 from wsgiref import simple_server, util
 from util import Trie
 import feedparser
-import feedme
-# Tempoary
-import sys
-sys.path.append('/home/rdmurray/src/dinsd/src')
+import syndicalist as syn
 import dinsd
 
-# XXX: Fix this.
-feedme.DBPATH = 'webtestdb.sqlite'
 import dinsd.sqlite_pickle_db
-feedme.db = dinsd.sqlite_pickle_db.Database(feedme.DBPATH)
-#feedme.db._con.con.con.execute('PRAGMA count_changes = true;')
-feedme.db.set_key('articles', {'feedid', 'seqno'})
+# XXX: Fix this.
+syn.DBPATH = 'webtestdb.sqlite'
+syn.db = dinsd.sqlite_pickle_db.Database(syn.DBPATH)
+#syn.db = dinsd.sqlite_pickle_db.Database(syn.DBPATH, debug_sql=True)
+# Work around the fact that dinsd doesn't persist keys yet.  Having a key on
+# this table is necessary: for some reason if update uses all the fields to
+# look up a record (which it will do if there is no more limited key available)
+# the update's where fails to match and no actual update is done.  A bug in
+# sqlite, perhaps?
+syn.db.set_key('articles', {'feedid', 'seqno'})
 
 def byte_me(iterator):
     for line in iterator:
@@ -62,9 +65,9 @@ def feedlist(environ, respond):
 
 @handles_path('/refresh')
 def refresh_all(environ, respond):
-    for feed in feedme.db.r.feedlist:
+    for feed in syn.db.r.feedlist:
         try:
-            feedme.new_articles(feed.id, feedparser.parse(feed.url))
+            syn.new_articles(feed.id, feedparser.parse(feed.url))
         except Exception as err:
             print("Error updating {}: {}".format(feed.url, err))
     respond('302 Redirect', [('Location', '/')])
@@ -85,7 +88,7 @@ def articlelist(environ, respond):
         yield from byte_me(['Invalid feed id {}'.format(args)])
         return
     with dinsd.ns(feedid=feedid):
-        feed = feedme.db.r.feedlist.where('id == feedid')
+        feed = syn.db.r.feedlist.where('id == feedid')
         if not feed:
             respond('404 Not Found', [('Content-Type', 'text/plain')])
             yield from byte_me(['Feed {} not found in DB'.format(feedid)])
@@ -104,12 +107,12 @@ def refresh_feed(environ, respond):
         yield from byte_me(['Invalid feed id {}'.format(args)])
         return
     with dinsd.ns(feedid=feedid):
-        feed = feedme.db.r.feedlist.where('id == feedid')
+        feed = syn.db.r.feedlist.where('id == feedid')
         if not feed:
             respond('404 Not Found', [('Content-Type', 'text/plain')])
             yield from byte_me(['Feed {} not found in DB'.format(feedid)])
             return
-    feedme.new_articles(feedid, feedparser.parse((~feed).url))
+    syn.new_articles(feedid, feedparser.parse((~feed).url))
     respond('302 Redirect',
             [('Location', '/feed/{}'.format(feedid))])
     yield b''
@@ -124,12 +127,12 @@ def article(environ, respond):
         yield from byte_me(['Invalid articleid id {}'.format(args)])
         return
     with dinsd.ns(fid=feedid, sno=seqno):
-        feed = feedme.db.r.feedlist.where('id == fid')
+        feed = syn.db.r.feedlist.where('id == fid')
         if not feed:
             respond('404 Not Found', [('Content-Type', 'text/plain')])
             yield from byte_me(['Feed {} not found in DB'.format(feedid)])
             return
-        article = feedme.db.r.articles.where('feedid==fid and seqno==sno')
+        article = syn.db.r.articles.where('feedid==fid and seqno==sno')
         if not article:
             respond('404 Not Found', [('Content-Type', 'text/plain')])
             yield from byte_me(['article {} not found in DB'.format(args)])
@@ -163,17 +166,17 @@ def _article_nav(environ, respond, direction):
         return
     nextsno = seqno+direction
     with dinsd.ns(fid=feedid, sno=seqno, nextsno=nextsno):
-        feed = feedme.db.r.feedlist.where('id == fid')
+        feed = syn.db.r.feedlist.where('id == fid')
         if not feed:
             respond('404 Not Found', [('Content-Type', 'text/plain')])
             yield from byte_me(['Feed {} not found in DB'.format(feedid)])
             return
-        article = feedme.db.r.articles.where('feedid==fid and seqno==sno')
+        article = syn.db.r.articles.where('feedid==fid and seqno==sno')
         if not article:
             respond('404 Not Found', [('Content-Type', 'text/plain')])
             yield from byte_me(['article {} not found in DB'.format(args)])
             return
-        article = feedme.db.r.articles.where('feedid==fid and seqno==nextsno')
+        article = syn.db.r.articles.where('feedid==fid and seqno==nextsno')
         if article:
             nextpage = '/article/nav/markread/{}/{}'.format(feedid, nextsno)
         else:
@@ -202,17 +205,17 @@ def _article_setread(environ, respond, changefunc):
         yield from byte_me(['Invalid articleid id {}'.format(args)])
         return
     with dinsd.ns(fid=feedid, sno=seqno, changefunc=changefunc):
-        feed = feedme.db.r.feedlist.where('id == fid')
+        feed = syn.db.r.feedlist.where('id == fid')
         if not feed:
             respond('404 Not Found', [('Content-Type', 'text/plain')])
             yield from byte_me(['Feed {} not found in DB'.format(feedid)])
             return
-        article = ~feedme.db.r.articles.where('feedid==fid and seqno==sno')
+        article = ~syn.db.r.articles.where('feedid==fid and seqno==sno')
         if not article:
             respond('404 Not Found', [('Content-Type', 'text/plain')])
             yield from byte_me(['article {} not found in DB'.format(args)])
             return
-        feedme.db.r.articles.update('feedid==fid and seqno==sno',
+        syn.db.r.articles.update('feedid==fid and seqno==sno',
                                     read="changefunc(read)")
     respond('302 Redirect',
             [('Location', '/article/{}/{}'.format(feedid, seqno))])
@@ -256,8 +259,8 @@ def link(text, url, style=None):
     return '<a{}href="{}">{}</a>'.format(style, url, text)
 
 def feedlist_content(showall):
-    with dinsd.ns(articles=feedme.db.r.articles):
-        feedlist = feedme.db.r.feedlist.extend(unread=
+    with dinsd.ns(articles=syn.db.r.articles):
+        feedlist = syn.db.r.feedlist.extend(unread=
             'len(articles.where("feedid=={} and not read".format(id)))')
     selectfunc = (lambda x: True) if showall else (lambda x: x)
     feedlist = [(x.unread, x.title, x.id, x.url)
@@ -274,7 +277,7 @@ def feedlist_content(showall):
 
 def articlelist_content(feedid, showall):
     with dinsd.ns(id=feedid):
-        articles = feedme.db.r.articles.where(
+        articles = syn.db.r.articles.where(
             'feedid == id' + ('' if showall else ' and not read'))
     if articles:
         sample = next(iter(articles))
@@ -339,8 +342,8 @@ def article_content(article):
     yield '</div>'
 
 
-feedme_server = simple_server.make_server('', 8080, app)
+syn_server = simple_server.make_server('', 8080, app)
 try:
-    feedme_server.serve_forever()
+    syn_server.serve_forever()
 except KeyboardInterrupt:
-    feedme.db.close()
+    syn.db.close()

@@ -1,5 +1,7 @@
-Feedme Command Tests
-====================
+Syndicalist Command Tests
+=========================
+
+Copyright (c) 2013 by R. David Murray under an MIT license (LICENSE.txt).
 
 Infrastructure
 --------------
@@ -13,7 +15,7 @@ will be left in place):
     >>> if os.path.exists(DBPATH):
     ...     os.remove(DBPATH)
 
-This ``run`` command allows us to run the ``feedme`` command and capture the
+This ``run`` command allows us to run the ``syndicalist`` command and capture the
 results such that doctest can check them:
 
     >>> from subprocess import Popen, PIPE
@@ -80,12 +82,12 @@ Initializing the Database
 To use feedly you first need to initialize the database.  This creates the
 necessary (empty) tables:
 
-    >>> run('feedme init')
+    >>> run('syndicalist init')
     Database initialized
 
 We can see, for example that the list of feeds exists, but is empty:
 
-    >>> run('feedme listfeeds -a')
+    >>> run('syndicalist listfeeds -a')
     +----+-------+----------+---------+-----+
     | id | title | subtitle | pubdate | url |
     +----+-------+----------+---------+-----+
@@ -93,7 +95,7 @@ We can see, for example that the list of feeds exists, but is empty:
 
 Once initialized, it is an error to run the ``init`` command again:
 
-    >>> run('feedme init')                  # doctest: +ELLIPSIS
+    >>> run('syndicalist init')                  # doctest: +ELLIPSIS
     ------------
     Traceback (most recent call last):
       ...
@@ -109,11 +111,11 @@ See below for how to re-initialize the database.
 Adding a Feed
 -------------
 
-The first step in using feedme is to add a feed to the database.  We do this
+The first step in using syndicalist is to add a feed to the database.  We do this
 using the ``addfeed`` subcommand, which takes the URL of the feed as its only
 argument:
 
-    >>> run('feedme addfeed ' + example_url('rss20.xml'))       # doctest: +ELLIPSIS
+    >>> run('syndicalist addfeed ' + example_url('rss20.xml'))       # doctest: +ELLIPSIS
     Added new feed:
     +----+-------------+---------------------------------+----------------------------+------------------...-----------+
     | id | title       | subtitle                        | published                  | url              ...           |
@@ -123,7 +125,7 @@ argument:
 
 The feed is now in the feed table:
 
-    >>> run('feedme listfeeds -a')                              # doctest: +ELLIPSIS
+    >>> run('syndicalist listfeeds -a')                              # doctest: +ELLIPSIS
     +----+-------------+---------------------------------+----------------------------+------------------...-----------+
     | id | title       | subtitle                        | pubdate                    | url              ...           |
     +----+-------------+---------------------------------+----------------------------+------------------...-----------+
@@ -132,7 +134,7 @@ The feed is now in the feed table:
 
 Once a feed has been entered, it is an error to enter it again:
 
-    >>> run('feedme addfeed ' + example_url('rss20.xml'))       # doctest: +ELLIPSIS
+    >>> run('syndicalist addfeed ' + example_url('rss20.xml'))       # doctest: +ELLIPSIS
     Feed already exists in database: http://127.0.0.1:.../rss20.xml
 
 Note that this is a strict match on the URL, so if you have two URLs that
@@ -148,22 +150,22 @@ Reinitializing the Database
 In production you'd never use this, but the ``init`` method has an ``-r``
 option that allows you to wipe the existing database and start fresh:
 
-    >>> run('feedme init -r')
+    >>> run('syndicalist init -r')
     Database cleared
     Database reinitialized
-    >>> run('feedme listfeeds -a')
+    >>> run('syndicalist listfeeds -a')
     +----+-------+----------+---------+-----+
     | id | title | subtitle | pubdate | url |
     +----+-------+----------+---------+-----+
     +----+-------+----------+---------+-----+
-    >>> run('feedme addfeed ' + example_url('rss20.xml'))       # doctest: +ELLIPSIS
+    >>> run('syndicalist addfeed ' + example_url('rss20.xml'))       # doctest: +ELLIPSIS
     Added new feed:
     +----+-------------+---------------------------------+----------------------------+------------------...-----------+
     | id | title       | subtitle                        | published                  | url              ...           |
     +----+-------------+---------------------------------+----------------------------+------------------...-----------+
     | 1  | Sample Feed | For documentation <em>only</em> | 2002-09-07 00:00:01.000005 | http://127.0.0.1:.../rss20.xml |
     +----+-------------+---------------------------------+----------------------------+------------------...-----------+
-    >>> run('feedme listfeeds -a')                              # doctest: +ELLIPSIS
+    >>> run('syndicalist listfeeds -a')                              # doctest: +ELLIPSIS
     +----+-------------+---------------------------------+----------------------------+------------------...-----------+
     | id | title       | subtitle                        | pubdate                    | url              ...           |
     +----+-------------+---------------------------------+----------------------------+------------------...-----------+
@@ -179,7 +181,7 @@ database.  (We'll see how to update the list with new articles below.)  The
 list of articles can be show via the ``listarticles`` command, which takes
 a feed id as its argument:
 
-    >>> run('feedme listarticles 1')
+    >>> run('syndicalist listarticles 1')
     +----------------------------+-------------------+-------+
     | pubdate                    | title             | read  |
     +----------------------------+-------------------+-------+

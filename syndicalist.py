@@ -1,12 +1,10 @@
+# Copyright (c) 2013 by R. David Murray under an MIT license (LICENSE.txt).
 import os
 import sys
 import argparse
 import functools
 import feedparser
 from datetime import datetime
-
-# Tempoary
-sys.path.append('/home/rdmurray/src/dinsd/src')
 from dinsd import rel, row, ns
 from dinsd.sqlite_pickle_db import Database
 

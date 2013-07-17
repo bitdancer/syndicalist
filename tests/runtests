@@ -1,3 +1,3 @@
 #!/bin/sh
 echo `which python3`
-PATH=$PATH:'..' PYTHONPATH='.' python3 -m doctest -f test.doctest
+PATH=$PATH:'..' python3 -m doctest -f test.doctest

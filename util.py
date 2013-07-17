@@ -1,3 +1,4 @@
+# Copyright (c) 2013 by R. David Murray under an MIT license (LICENSE.txt).
 class Trie:
 
     """A dict with the ability look up keys by logest prefix match."""
