@@ -18,7 +18,7 @@ to talk to a database, and is thus an interesting demonstration project for
 that, if nothing else.
 
 The code is very rough at this stage, for which I make no apologies.  The only
-non-stdlib requirements are my dinsd_ package, and the excellent feedparser_
+non-stdlib requirements are my dinsd_ package and the excellent feedparser_
 package.  It serves pages using wsgiref, single threaded, which works fine
 almost all the time since only one person at a time will ever be hitting the
 server :).  Although it looks like a WSGI ap, I haven't learned enough about
