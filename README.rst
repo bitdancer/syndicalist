@@ -32,5 +32,5 @@ questions.  If anyone else wants to use it, I will document it.
 Oh, yeah, and syndicalist requires Python 3.4, which isn't even in Beta yet
 as I write this...
 
-. _dinsd: http://github.com/bitdancer/dinsd
-. _feedparser: https://pypi.python.org/pypi/feedparser/
+.. _dinsd: http://github.com/bitdancer/dinsd
+.. _feedparser: https://pypi.python.org/pypi/feedparser/
