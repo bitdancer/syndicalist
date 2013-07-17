@@ -16,6 +16,8 @@ import dinsd
 feedme.DBPATH = 'webtestdb.sqlite'
 import dinsd.sqlite_pickle_db
 feedme.db = dinsd.sqlite_pickle_db.Database(feedme.DBPATH)
+#feedme.db._con.con.con.execute('PRAGMA count_changes = true;')
+feedme.db.set_key('articles', {'feedid', 'seqno'})
 
 def byte_me(iterator):
     for line in iterator:
@@ -50,8 +52,23 @@ def notfound(environ, respond):
 
 @handles_path('/')
 def feedlist(environ, respond):
-    respond('200 OK', [('Content-Type', 'text/html')]) 
-    yield from byte_me(page('Feedme Feed List', feedlist_content()))
+    showall = environ['QUERY_STRING']
+    if showall and showall != 'showall':
+        respond('404 Not Found', [('Content-Type', 'text/plain')])
+        yield from byte_me(['Invalid query string {}'.format(showall)])
+        return
+    respond('200 OK', [('Content-Type', 'text/html; charset=utf-8')])
+    yield from byte_me(page('Feedme Feed List', feedlist_content(showall)))
+
+@handles_path('/refresh')
+def refresh_all(environ, respond):
+    for feed in feedme.db.r.feedlist:
+        try:
+            feedme.new_articles(feed.id, feedparser.parse(feed.url))
+        except Exception as err:
+            print("Error updating {}: {}".format(feed.url, err))
+    respond('302 Redirect', [('Location', '/')])
+    yield b''
 
 @handles_path('/feed/', args=True)
 def articlelist(environ, respond):
@@ -73,8 +90,8 @@ def articlelist(environ, respond):
             respond('404 Not Found', [('Content-Type', 'text/plain')])
             yield from byte_me(['Feed {} not found in DB'.format(feedid)])
             return
-    respond('200 OK', [('Content-Type', 'text/html')]) 
-    yield from byte_me(page('Article List for {}'.format((~feed).title),
+    respond('200 OK', [('Content-Type', 'text/html; charset=utf-8')])
+    yield from byte_me(page((~feed).title,
                             articlelist_content(feedid, showall)))
 
 @handles_path('/feed/refresh/', args=True)
@@ -118,9 +135,15 @@ def article(environ, respond):
             yield from byte_me(['article {} not found in DB'.format(args)])
             return
     article = ~article
-    respond('200 OK', [('Content-Type', article.data.content[0].type)]) 
+    if 'content' in article.data:
+        content_type = article.data.content[0].type
+    else:
+        content_type = 'text/html'
+    respond('200 OK', [('Content-Type', content_type + '; charset=utf-8')])
     yield from byte_me(page('{}: {}'.format((~feed).title, article.title),
-                            article_content(article)))
+                            article_content(article),
+                            h1=(link((~feed).title, '/feed/{}'.format(feedid)) +
+                                ':<br>' + link(article.title, article.link))))
 
 @handles_path('/article/nav/prev/', args=True)
 def article_prev(environ, respond):
@@ -154,7 +177,7 @@ def _article_nav(environ, respond, direction):
         if article:
             nextpage = '/article/nav/markread/{}/{}'.format(feedid, nextsno)
         else:
-            nextpage = '/feed/{}'.format(feedid)
+            nextpage = '/'
     respond('302 Redirect', [('Location', nextpage)])
     yield b''
 
@@ -198,15 +221,18 @@ def _article_setread(environ, respond, changefunc):
 
 # Layout Functions.
 
-def page(title, content):
+def page(title, content, h1=None):
+    if h1 is None:
+        h1 = title
     yield '<html>'
     yield '<head>'
     yield '  <title>'
-    yield '    ' + title
+    yield '    Feedme: ' + title
     yield '  </title>'
+    yield '  <meta name="viewport" content="width=device-width">'
     yield '</head>'
-    yield '<body>'
-    yield '  <h1>{}</h1>'.format(title)
+    yield '<body bgcolor="#000000" text="#FFFFFF" link="#FFFFFF" vlink="#FFFFFF">'
+    yield '  <h1 style="max-width: 8in">{}</h1>'.format(h1)
     for line in content:
         yield '  ' + line
     yield '</body>'
@@ -229,27 +255,48 @@ def link(text, url, style=None):
     style = ' style="{}" '.format(style) if style else ' '
     return '<a{}href="{}">{}</a>'.format(style, url, text)
 
-def feedlist_content():
+def feedlist_content(showall):
     with dinsd.ns(articles=feedme.db.r.articles):
         feedlist = feedme.db.r.feedlist.extend(unread=
             'len(articles.where("feedid=={} and not read".format(id)))')
-    feedlist = [(x.unread, x.title, x.id) for x in feedlist]
+    selectfunc = (lambda x: True) if showall else (lambda x: x)
+    feedlist = [(x.unread, x.title, x.id, x.url)
+                for x in feedlist if selectfunc(x.unread)]
     feedlist.sort(key=operator.itemgetter(1))
-    feedlist = [(u, link(t, '/feed/{}'.format(i))) for (u, t, i) in feedlist]
-    yield from table(('Unread', 'Title'), feedlist)
+    feedlist = [(u, link(t, '/feed/{}'.format(i)), url)
+                for (u, t, i, url) in feedlist]
+    yield from table(('Unread', 'Title', 'URL'), feedlist)
+    yield '<p style="text-align: center">'
+    yield '  ' + link('Refresh All', '/refresh', style='float:left')
+    yield '  ' + link('Hide Read' if showall else 'Show All',
+                      '/' + '' if showall else '?showall')
+    yield '</p>'
 
 def articlelist_content(feedid, showall):
     with dinsd.ns(id=feedid):
         articles = feedme.db.r.articles.where(
             'feedid == id' + ('' if showall else ' and not read'))
-    articles = [(x.title, x.seqno, x.data.summary, x.pubdate) for x in articles]
-    articles.sort(key=operator.itemgetter(3))
-    articles = [(link(t, '/article/nav/markread/{}/{}'.format(feedid, n)), s, p)
-                for (t, n, s, p) in articles]
-    yield from table(('Title', 'Summary', 'Published'), articles)
+    if articles:
+        sample = next(iter(articles))
+        if ('content' in sample.data
+                and sample.data.content[0].value
+                and sample.data.content[0].value != sample.data.summary
+                and len(sample.data.summary) < 200
+                and not '<img' in sample.data.summary):
+            articles = [(x.title, x.seqno, x.data.summary, x.pubdate) for x in articles]
+            articles.sort(key=operator.itemgetter(1))
+            articles = [(link(t, '/article/nav/markread/{}/{}'.format(feedid, n)), s, p)
+                        for (t, n, s, p) in articles]
+            yield from table(('Title', 'Summary', 'Published'), articles)
+        else:
+            articles = [(x.title, x.seqno, x.pubdate) for x in articles]
+            articles.sort(key=operator.itemgetter(1))
+            articles = [(link(t, '/article/nav/markread/{}/{}'.format(feedid, n)), p)
+                        for (t, n, p) in articles]
+            yield from table(('Title', 'Published'), articles)
     yield '<p style="text-align: center">'
     yield '  ' + link('Refresh', '/feed/refresh/{}'.format(feedid), style='float: left')
-    yield '  ' + link('Show Unread' if showall else 'Show All',
+    yield '  ' + link('Hide Read' if showall else 'Show All',
                       '/feed/{}'.format(feedid) + '' if showall else '?showall')
     yield '  ' + link('Feed List', '/', style='float: right')
     yield '</p>'
@@ -258,20 +305,42 @@ def article_content(article):
     feedid = article.feedid
     seqno = article.seqno
     readstate = 'Mark Unread' if article.read else 'Mark Read'
-    yield '<div style="max-width:8.5in">'
-    for line in article.data.content[0].value.splitlines():
-        yield '  ' + line
+    aid = str(feedid) + '/' + str(seqno)
+    yield '<div style="max-width:8in">'
+    # XXX: Do 'today' and 'yesterday' and weekdays
+    if 'author_detail' in article.data and 'name' in article.data.author_detail:
+        author = ' by ' + article.data.author_detail.name
+    else:
+        author = ''
+    yield '  <p>Posted {:%Y-%m-%d %H:%M}{}</p>'.format(article.pubdate, author)
+    if 'content' in article.data:
+        if (len(article.data.summary) < 200
+                and not '<img' in article.data.summary):
+            yield '  <em>{}</em>'.format(article.data.summary)
+        for line in article.data.content[0].value.splitlines():
+            yield '  ' + line
+    else:
+        for line in article.data.summary.splitlines():
+            yield '  ' + line
     yield '  <p></p>'
-    yield '  <p style="text-align:center">'
-    yield ('    <a style="float:left" href="/article/nav/prev/{}/{}">'
-                    'Prev</a>'.format(feedid, seqno))
-    yield ('    <a href="/article/nav/toggleread/{}/{}">'
-                    '{}</a>'.format(feedid, seqno, readstate))
-    yield ('    <a style="float:right" href="/article/nav/next/{}/{}">'
-                    'Next</a>'.format(feedid, seqno))
-    yield '  </p>'
+    yield '  <table width="100%" style="max-width: 8in">'
+    yield '    <tr>'
+    yield '      <td style="text-align: left">'
+    yield '        ' + link('Prev', '/article/nav/prev/' + aid)
+    yield '      </td>'
+    yield '      <td style="text-align: center">'
+    yield '        ' + link(readstate, '/article/nav/toggleread/' + aid)
+    yield '      </td>'
+    yield '      <td style="text-align: right">'
+    yield '        ' + link('Next', '/article/nav/next/' + aid)
+    yield '      </td>'
+    yield '    </tr>'
+    yield '  </table>'
     yield '</div>'
 
 
 feedme_server = simple_server.make_server('', 8080, app)
-feedme_server.serve_forever()
+try:
+    feedme_server.serve_forever()
+except KeyboardInterrupt:
+    feedme.db.close()

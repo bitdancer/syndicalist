@@ -10,10 +10,6 @@ sys.path.append('/home/rdmurray/src/dinsd/src')
 from dinsd import rel, row, ns
 from dinsd.sqlite_pickle_db import Database
 
-# These will go in an external config file eventually.
-DBPATH = '/home/rdmurray/src/feedme/testdb.sqlite'
-
-db = Database(DBPATH)
 
 class FeedmeError(Exception):
     pass
@@ -32,13 +28,17 @@ def new_articles(feedid, feedblob):
             if db.r.articles.where('guid == a.id'):
                 # Do we need to check pubdate in case of update?
                 continue
+            if 'published_parsed' in a:
+                pubdate = datetime(*a.published_parsed[:7])
+            else:
+                pubdate = datetime(1900, 1, 1)
             new_article = row(guid=a.id,
                               feedid=feedid,
                               seqno=nextid,
                               title=a.title,
                               link=a.link,
                               data=a,
-                              pubdate=datetime(*a.published_parsed[:7]),
+                              pubdate=pubdate,
                               read=False)
             db.r.articles.insert(~new_article)
             new = new | ~new_article
@@ -58,8 +58,10 @@ def init(args):
         re = 're'
         print('Database cleared')
     db['feedlist']  = rel(id=int, url=str, title=str, subtitle=str)
+    db.set_key('feedlist', {'id'})
     # Ideally we'd normalize title and subtitle, too, but later for that.
     db['published'] = rel(id=int, published=datetime)
+    db.set_key('published', {'id'})
     db['published_unknown'] = rel(id=int)
     db['articles'] = rel(guid=str,
                          feedid=int,
@@ -69,6 +71,7 @@ def init(args):
                          data=feedparser.FeedParserDict,
                          pubdate=datetime,
                          read=bool)
+    db.set_key('articles', {'feedid', 'seqno'})
     print('Database {}initialized'.format(re))
 
 def wipe(args):
@@ -162,6 +165,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-D', '--debug', action='store_true',
                         help='turn on debugging')
+    parser.add_argument('-d', '--database', default='testdb.sqlite',
+                        help='path to sqlite database file')
 
     sub_parsers = parser.add_subparsers(
         help='Enter <subcommand> --help for subcommand help')
@@ -195,5 +200,10 @@ def main():
     if args.debug:
         import dinsd
         dinsd._debug = True
+
+    # XXX The default needs to move to a config file.
+    global db, DBPATH
+    DBPATH = os.path.abspath(args.database)
+    db = Database(DBPATH)
 
     return args.subfunc(args)

@@ -4,12 +4,22 @@ Feedme Command Tests
 Infrastructure
 --------------
 
+We'll be creating a test database, so we need to make sure it doesn't exist at
+the start of the run (we'll delete it at the end, but if a test run fails it
+will be left in place):
+
+    >>> import os
+    >>> DBPATH = os.path.abspath('testdb.sqlite')
+    >>> if os.path.exists(DBPATH):
+    ...     os.remove(DBPATH)
+
 This ``run`` command allows us to run the ``feedme`` command and capture the
 results such that doctest can check them:
 
-    >>> import os
     >>> from subprocess import Popen, PIPE
     >>> def run(cmd):
+    ...     cmd, args = cmd.split(None, 1)
+    ...     cmd = cmd + ' -d ' + DBPATH + ' ' + args
     ...     p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
     ...     rc = p.wait()
     ...     print(p.stdout.read().decode(), end='')
@@ -18,14 +28,6 @@ results such that doctest can check them:
     ...         print('------------')
     ...         print(errs.decode(), end='')
     ...     return rc if rc else None
-
-We'll be creating a test database, so we need to make sure it doesn't exist at
-the start of the run (we'll delete it at the end, but if a test run fails it
-will be left in place):
-
-    >>> DBPATH = '/home/rdmurray/src/feedme/testdb.sqlite'
-    >>> if os.path.exists(DBPATH):
-    ...     os.remove(DBPATH)
 
 Note that the above hardcoded path will need to be fixed before release;
 I'm too lazy to bother with it at this stage.
