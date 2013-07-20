@@ -281,18 +281,6 @@ def articlelist_content(feedid, showall):
         articles = syn.db.r.articles.where(
             'feedid == id' + ('' if showall else ' and not read'))
     if articles:
-        sample = next(iter(articles))
-        if ('content' in sample.data
-                and sample.data.content[0].value
-                and sample.data.content[0].value != sample.data.summary
-                and len(sample.data.summary) < 200
-                and not '<img' in sample.data.summary):
-            articles = [(x.title, x.seqno, x.data.summary, x.pubdate) for x in articles]
-            articles.sort(key=operator.itemgetter(1))
-            articles = [(link(t, '/article/nav/markread/{}/{}'.format(feedid, n)), s, p)
-                        for (t, n, s, p) in articles]
-            yield from table(('Title', 'Summary', 'Published'), articles)
-        else:
             articles = [(x.title, x.seqno, x.pubdate) for x in articles]
             articles.sort(key=operator.itemgetter(1))
             articles = [(link(t, '/article/nav/markread/{}/{}'.format(feedid, n)), p)
