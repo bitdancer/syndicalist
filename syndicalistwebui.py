@@ -233,8 +233,13 @@ def page(title, content, h1=None):
     yield '</head>'
     yield '<body bgcolor="#000000" text="#FFFFFF" link="#FFFFFF" vlink="#FFFFFF">'
     yield '  <h1 style="max-width: 8in">{}</h1>'.format(h1)
-    for line in content:
-        yield '  ' + line
+    yield '  <table>'
+    for part in content:
+        yield '    <tr><td>'
+        for line in part:
+            yield '      ' + line
+        yield '    </td></tr>'
+    yield '  </table>'
     yield '</body>'
     yield '</html>'
 
@@ -249,6 +254,17 @@ def table(titlerow, content_rows):
         for item in row:
             yield '    <td style="max-width: 8in">{}</td>'.format(item)
         yield '  </tr>'
+    yield '</table>'
+
+def linktable(*links):
+    yield '<table width="100%">'
+    yield '  <tr>'
+    yield '    <td align="left">{}</td>'.format(links[0])
+    for link in links[1:-1]:
+        yield '    <td align="center">{}</td>'.format(link)
+    if len(links) > 1:
+        yield '    <td align="right">{}</td>'.format(links[-1])
+    yield '  </tr>'
     yield '</table>'
 
 def link(text, url, settings=None, style=None):
@@ -269,12 +285,12 @@ def feedlist_content(environ):
     feedlist.sort(key=operator.itemgetter(1))
     feedlist = [(u, link(t, '/feed/{}'.format(i)), url)
                 for (u, t, i, url) in feedlist]
-    yield from table(('Unread', 'Title', 'URL'), feedlist)
-    yield '<p style="text-align: center">'
-    yield '  ' + link('Refresh All', '/refresh', style='float:left')
-    yield '  ' + link('Hide Read' if showall else 'Show All',
-                      '/' + '' if showall else '?showall')
-    yield '</p>'
+    yield table(('Unread', 'Title', 'URL'), feedlist)
+    yield linktable(
+       '<p style="text-align: center">',
+       link('Refresh All', '/refresh', style='float:left'),
+       link('Hide Read' if showall else 'Show All',
+            '/' + '' if showall else '?showall=1'))
 
 def articlelist_content(feedid, showall):
     with dinsd.ns(id=feedid):
@@ -286,19 +302,25 @@ def articlelist_content(feedid, showall):
             articles = [(link(t, '/article/nav/markread/{}/{}'.format(feedid, n)),
                          '{:%Y-%m-%d %H:%M}'.format(p))
                         for (t, n, p) in articles]
-            yield from table(('Title', 'Published'), articles)
-    yield '<p style="text-align: center">'
-    yield '  ' + link('Refresh', '/feed/refresh/{}'.format(feedid), style='float: left')
-    yield '  ' + link('Hide Read' if showall else 'Show All',
-                      '/feed/{}'.format(feedid) + '' if showall else '?showall')
-    yield '  ' + link('Feed List', '/', style='float: right')
-    yield '</p>'
+            yield table(('Title', 'Published'), articles)
+    yield linktable(
+        link('Refresh', '/feed/refresh/{}'.format(feedid)),
+        link('Hide Read' if showall else 'Show All',
+                  '/feed/{}'.format(feedid) + '' if showall else '?showall'),
+        link('Feed List', '/'))
 
 def article_content(article):
     feedid = article.feedid
     seqno = article.seqno
     readstate = 'Mark Unread' if article.read else 'Mark Read'
     aid = str(feedid) + '/' + str(seqno)
+    yield article_body(article)
+    yield linktable(
+        link('Prev', '/article/nav/prev/' + aid),
+        link(readstate, '/article/nav/toggleread/' + aid),
+        link('Next', '/article/nav/next/' + aid))
+
+def article_body(article):
     yield '<div style="max-width:8in">'
     # XXX: Do 'today' and 'yesterday' and weekdays
     if 'author_detail' in article.data and 'name' in article.data.author_detail:
@@ -315,20 +337,6 @@ def article_content(article):
     else:
         for line in article.data.summary.splitlines():
             yield '  ' + line
-    yield '  <p></p>'
-    yield '  <table width="100%" style="max-width: 8in">'
-    yield '    <tr>'
-    yield '      <td style="text-align: left">'
-    yield '        ' + link('Prev', '/article/nav/prev/' + aid)
-    yield '      </td>'
-    yield '      <td style="text-align: center">'
-    yield '        ' + link(readstate, '/article/nav/toggleread/' + aid)
-    yield '      </td>'
-    yield '      <td style="text-align: right">'
-    yield '        ' + link('Next', '/article/nav/next/' + aid)
-    yield '      </td>'
-    yield '    </tr>'
-    yield '  </table>'
     yield '</div>'
 
 
