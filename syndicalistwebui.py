@@ -283,7 +283,8 @@ def articlelist_content(feedid, showall):
     if articles:
             articles = [(x.title, x.seqno, x.pubdate) for x in articles]
             articles.sort(key=operator.itemgetter(1))
-            articles = [(link(t, '/article/nav/markread/{}/{}'.format(feedid, n)), p)
+            articles = [(link(t, '/article/nav/markread/{}/{}'.format(feedid, n)),
+                         '{:%Y-%m-%d %H:%M}'.format(p))
                         for (t, n, p) in articles]
             yield from table(('Title', 'Published'), articles)
     yield '<p style="text-align: center">'
