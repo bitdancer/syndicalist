@@ -5,6 +5,7 @@ import operator
 import functools
 import contextlib
 from wsgiref import simple_server, util
+from urllib.parse import parse_qs, urlencode
 from util import Trie
 import feedparser
 import syndicalist as syn
@@ -55,13 +56,8 @@ def notfound(environ, respond):
 
 @handles_path('/')
 def feedlist(environ, respond):
-    showall = environ['QUERY_STRING']
-    if showall and showall != 'showall':
-        respond('404 Not Found', [('Content-Type', 'text/plain')])
-        yield from byte_me(['Invalid query string {}'.format(showall)])
-        return
     respond('200 OK', [('Content-Type', 'text/html; charset=utf-8')])
-    yield from byte_me(page('Feedme Feed List', feedlist_content(showall)))
+    yield from byte_me(page('Feedme Feed List', feedlist_content(environ)))
 
 @handles_path('/refresh')
 def refresh_all(environ, respond):
@@ -255,11 +251,15 @@ def table(titlerow, content_rows):
         yield '  </tr>'
     yield '</table>'
 
-def link(text, url, style=None):
+def link(text, url, settings=None, style=None):
     style = ' style="{}" '.format(style) if style else ' '
+    if settings:
+        url = url + '?' + urlencode(settings)
     return '<a{}href="{}">{}</a>'.format(style, url, text)
 
-def feedlist_content(showall):
+def feedlist_content(environ):
+    settings = parse_qs(environ['QUERY_STRING'])
+    showall = settings.get('showall', False)
     with dinsd.ns(articles=syn.db.r.articles):
         feedlist = syn.db.r.feedlist.extend(unread=
             'len(articles.where("feedid=={} and not read".format(id)))')
