@@ -198,17 +198,16 @@ def _article_nav(environ, respond, direction):
             respond('404 Not Found', [('Content-Type', 'text/plain')])
             yield from byte_me(['Feed {} not found in DB'.format(feedid)])
             return
-        #article = syn.db.r.articles.where('feedid==fid and seqno==sno')
-        #if not article:
-        #    respond('404 Not Found', [('Content-Type', 'text/plain')])
-        #    yield from byte_me(['article {} not found in DB'.format(args)])
-        #    return
-        #article = syn.db.r.articles.where('feedid==fid and seqno==nextsno')
-        #if article:
-        #    nextpage = '/article/nav/markread/{}/{}'.format(feedid, nextsno)
-        #else:
-        #    nextpage = '/'
-        nextpage = '/article/nav/markread/{}/{}'.format(feedid, nextsno)
+        article = syn.db.r.articles.where('feedid==fid and seqno==sno')
+        if not article:
+            respond('404 Not Found', [('Content-Type', 'text/plain')])
+            yield from byte_me(['article {} not found in DB'.format(args)])
+            return
+        article = syn.db.r.articles.where('feedid==fid and seqno==nextsno')
+        if article:
+            nextpage = '/article/nav/markread/{}/{}'.format(feedid, nextsno)
+        else:
+            nextpage = '/'
     respond('302 Redirect', [('Location', nextpage)])
     yield b''
 

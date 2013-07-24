@@ -12,6 +12,9 @@ a purge function.  Some of the functionality (such as adding feeds) is handled
 by a CLI, which you have to stop the server to use.  Eventually I'll probably
 add web UI hooks for all of those.
 
+There is exactly one javascript based feature: left and right swipe on the
+article view will trigger 'next' and 'prev', respectively.
+
 This tool is tailored to my news reading preferences, and is probably not of
 interest to anyone else, but it is an example of using the dinsd_ SQL interface
 to talk to a database, and is thus an interesting demonstration project for

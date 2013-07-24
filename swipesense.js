@@ -114,9 +114,8 @@ function determineSwipeDirection() {
 function processingRoutine() {
     var swipedElement = document.getElementById(triggerElementID);
     if ( swipeDirection == 'left' ) {
-        window.location.pathname = window.location.pathname.replace('article', 'article/nav/next')
+        window.location.pathname = window.location.pathname.replace('article', 'article/nav/next');
     } else if ( swipeDirection == 'right' ) {
-        window.location.pathname = window.location.pathname.replace('article', 'article/nav/prev')
+        window.location.pathname = window.location.pathname.replace('article', 'article/nav/prev');
     }
 }
-
