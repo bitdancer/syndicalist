@@ -314,11 +314,16 @@ def articlelist_content(feedid, showall):
         articles = syn.db.r.articles.where(
             'feedid == id' + ('' if showall else ' and not read'))
     if articles:
-            articles = [(x.title, x.seqno, x.pubdate) for x in articles]
+            articles = [(x.title, x.seqno, x.pubdate,
+                         x.data.author_detail.get('name', '')
+                            if 'author_detail' in x.data else '')
+                        for x in articles]
             articles.sort(key=operator.itemgetter(1))
-            articles = [(link(t, '/article/nav/markread/{}/{}'.format(feedid, n)),
+            articles = [(link(t,
+                              '/article/nav/markread/{}/{}'.format(feedid, n)),
+                         a,
                          '{:%Y-%m-%d %H:%M}'.format(p))
-                        for (t, n, p) in articles]
+                        for (t, n, p, a) in articles]
             yield table(('Title', 'Published'), articles)
     yield linktable(
         link('Refresh', '/feed/refresh/{}'.format(feedid)),
