@@ -111,9 +111,38 @@ def refresh_feed(environ, respond):
             yield from byte_me(['Feed {} not found in DB'.format(feedid)])
             return
     syn.new_articles(feedid, feedparser.parse((~feed).url))
-    respond('302 Redirect',
-            [('Location', '/feed/{}'.format(feedid))])
+    respond('302 Redirect', [('Location', '/feed/{}'.format(feedid))])
     yield b''
+
+def _change_article_read(environ, respond, changefunc, successurl):
+    args = environ['PATH_REMAINDER']
+    try:
+        feedid, seqno = map(int, args.split('/'))
+    except ValueError:
+        respond('404 Not Found', [('Content-Type', 'text/plain')])
+        yield from byte_me(['Invalid articleid id {}'.format(args)])
+        return
+    with dinsd.ns(fid=feedid, sno=seqno, changefunc=changefunc):
+        feed = syn.db.r.feedlist.where('id == fid')
+        if not feed:
+            respond('404 Not Found', [('Content-Type', 'text/plain')])
+            yield from byte_me(['Feed {} not found in DB'.format(feedid)])
+            return
+        article = ~syn.db.r.articles.where('feedid==fid and seqno==sno')
+        if not article:
+            respond('404 Not Found', [('Content-Type', 'text/plain')])
+            yield from byte_me(['article {} not found in DB'.format(args)])
+            return
+        syn.db.r.articles.update('feedid==fid and seqno==sno',
+                                    read="changefunc(read)")
+    respond('302 Redirect',
+            [('Location', successurl.format(feedid=feedid, seqno=seqno))])
+    yield b''
+
+@handles_path('/feed/nav/markread/', args=True)
+def feed_mark_article_read(environ, respond):
+    yield from _change_article_read(environ, respond,
+                                    lambda x: True, '/feed/{feedid}')
 
 @handles_path('/article/', args=True)
 def article(environ, respond):
@@ -196,29 +225,8 @@ def article_markunread(environ, respond):
     return _article_setread(environ, respond, lambda x: False)
 
 def _article_setread(environ, respond, changefunc):
-    args = environ['PATH_REMAINDER']
-    try:
-        feedid, seqno = map(int, args.split('/'))
-    except ValueError:
-        respond('404 Not Found', [('Content-Type', 'text/plain')])
-        yield from byte_me(['Invalid articleid id {}'.format(args)])
-        return
-    with dinsd.ns(fid=feedid, sno=seqno, changefunc=changefunc):
-        feed = syn.db.r.feedlist.where('id == fid')
-        if not feed:
-            respond('404 Not Found', [('Content-Type', 'text/plain')])
-            yield from byte_me(['Feed {} not found in DB'.format(feedid)])
-            return
-        article = ~syn.db.r.articles.where('feedid==fid and seqno==sno')
-        if not article:
-            respond('404 Not Found', [('Content-Type', 'text/plain')])
-            yield from byte_me(['article {} not found in DB'.format(args)])
-            return
-        syn.db.r.articles.update('feedid==fid and seqno==sno',
-                                    read="changefunc(read)")
-    respond('302 Redirect',
-            [('Location', '/article/{}/{}'.format(feedid, seqno))])
-    yield b''
+    return _change_article_read(environ, respond, changefunc,
+                                '/article/{feedid}/{seqno}')
 
 @handles_path('/static/', args=True)
 def static(environ, respond):
@@ -322,9 +330,11 @@ def articlelist_content(feedid, showall):
             articles = [(link(t,
                               '/article/nav/markread/{}/{}'.format(feedid, n)),
                          a,
-                         '{:%Y-%m-%d %H:%M}'.format(p))
+                         '{:%Y-%m-%d %H:%M}'.format(p),
+                         link('X',
+                              '/feed/nav/markread/{}/{}'.format(feedid, n)))
                         for (t, n, p, a) in articles]
-            yield table(('Title', 'Published'), articles)
+            yield table(('Title', 'Author', 'Published', ''), articles)
     yield linktable(
         link('Refresh', '/feed/refresh/{}'.format(feedid)),
         link('Hide Read' if showall else 'Show All',
