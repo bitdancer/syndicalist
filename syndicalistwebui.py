@@ -4,7 +4,9 @@ import os
 import operator
 import functools
 import contextlib
-from wsgiref import simple_server, util
+import mimetypes
+from wsgiref import simple_server
+from wsgiref.util import FileWrapper
 from urllib.parse import parse_qs, urlencode
 from util import Trie
 import feedparser
@@ -218,6 +220,17 @@ def _article_setread(environ, respond, changefunc):
             [('Location', '/article/{}/{}'.format(feedid, seqno))])
     yield b''
 
+@handles_path('/static/', args=True)
+def static(environ, respond):
+    fn = environ['PATH_REMAINDER']
+    mimetype = mimetypes.guess_type(fn)[0]
+    if os.path.exists(fn):
+        respond('200 OK', [('Content-Type', mimetype)])
+        return FileWrapper(open(fn, "rb"))
+    else:
+        respond('404 Not Found', [('Content-Type', 'text/plain')])
+        return ['not found']
+
 
 # Layout Functions.
 
@@ -230,8 +243,13 @@ def page(title, content, h1=None):
     yield '    Feedme: ' + title
     yield '  </title>'
     yield '  <meta name="viewport" content="width=device-width">'
+    yield '  <script language="JavaScript" src="/static/swipesense.js"></script>'
     yield '</head>'
-    yield '<body bgcolor="#000000" text="#FFFFFF" link="#FFFFFF" vlink="#FFFFFF">'
+    yield '<body bgcolor="#000000" text="#FFFFFF" link="#FFFFFF" vlink="#FFFFFF"'
+    yield '      id="body" ontouchstart="touchStart(event, \'body\');"'
+    yield '                ontouchend="touchEnd(event);"'
+    yield '                ontouchmove="touchMove(event);"'
+    yield '                ontouchcancel="touchCancel(event);">'
     yield '  <h1 style="max-width: 8in">{}</h1>'.format(h1)
     yield '  <table>'
     for part in content:
@@ -287,8 +305,7 @@ def feedlist_content(environ):
                 for (u, t, i, url) in feedlist]
     yield table(('Unread', 'Title', 'URL'), feedlist)
     yield linktable(
-       '<p style="text-align: center">',
-       link('Refresh All', '/refresh', style='float:left'),
+       link('Refresh All', '/refresh'),
        link('Hide Read' if showall else 'Show All',
             '/' + '' if showall else '?showall=1'))
 
