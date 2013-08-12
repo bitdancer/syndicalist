@@ -5,6 +5,8 @@ import operator
 import functools
 import contextlib
 import mimetypes
+import threading
+import time
 from wsgiref import simple_server
 from wsgiref.util import FileWrapper
 from urllib.parse import parse_qs, urlencode
@@ -44,6 +46,20 @@ def handles_path(path, args=False):
         return handler
     return add_path
 
+def refresh_feeds():
+    for feed in syn.db.r.feedlist:
+        try:
+            syn.new_articles(feed.id, feedparser.parse(feed.url))
+        except Exception as err:
+            print("Error updating {}: {}".format(feed.url, err))
+
+class UpdateThread(threading.Thread):
+    def run(self):
+        while True:
+            time.sleep(60*60)
+            refresh_feeds()
+            # XXX Need 'clean_feeds' here too, to delete > N read articles
+
 def app(environ, respond):
     path = environ['PATH_INFO']
     handler, remainder = paths.get_longest_match(path)
@@ -63,11 +79,7 @@ def feedlist(environ, respond):
 
 @handles_path('/refresh')
 def refresh_all(environ, respond):
-    for feed in syn.db.r.feedlist:
-        try:
-            syn.new_articles(feed.id, feedparser.parse(feed.url))
-        except Exception as err:
-            print("Error updating {}: {}".format(feed.url, err))
+    refresh_feeds()
     respond('302 Redirect', [('Location', '/')])
     yield b''
 
@@ -373,6 +385,8 @@ def article_body(article):
 
 syn_server = simple_server.make_server('', 8080, app)
 try:
+    update_thread = UpdateThread(daemon=True)
+    update_thread.start()
     syn_server.serve_forever()
 except KeyboardInterrupt:
     syn.db.close()
