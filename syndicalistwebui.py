@@ -332,6 +332,11 @@ def articlelist_content(feedid, showall):
     with dinsd.ns(id=feedid):
         articles = syn.db.r.articles.where(
             'feedid == id' + ('' if showall else ' and not read'))
+    yield linktable(
+        link('Refresh', '/feed/refresh/{}'.format(feedid)),
+        link('Hide Read' if showall else 'Show All',
+                  '/feed/{}'.format(feedid) + '' if showall else '?showall'),
+        link('Feed List', '/'))
     if articles:
             articles = [(x.title, x.seqno, x.pubdate,
                          x.data.author_detail.get('name', '')
