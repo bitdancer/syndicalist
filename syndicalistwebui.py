@@ -364,13 +364,18 @@ def article_content(article):
         link('Next', '/article/nav/next/' + aid))
 
 def article_body(article):
+    with dinsd.ns(fid=article.feedid):
+        unreadcount = len(syn.db.r.articles.where('feedid==fid and not read'))
+    unreadlabel = '({} unread)'.format(unreadcount)
     yield '<div style="max-width:8in">'
     # XXX: Do 'today' and 'yesterday' and weekdays
     if 'author_detail' in article.data and 'name' in article.data.author_detail:
         author = ' by ' + article.data.author_detail.name
     else:
         author = ''
-    yield '  <p>Posted {:%Y-%m-%d %H:%M}{}</p>'.format(article.pubdate, author)
+    byline = 'Posted {:%Y-%m-%d %H:%M}{}'.format(article.pubdate, author)
+    for line in linktable(byline, '', unreadlabel):
+        yield '  ' + line
     if 'content' in article.data:
         if (len(article.data.summary) < 200
                 and not '<img' in article.data.summary):
