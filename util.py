@@ -1,7 +1,7 @@
 # Copyright (c) 2013 by R. David Murray under an MIT license (LICENSE.txt).
 class Trie:
 
-    """A dict with the ability look up keys by logest prefix match."""
+    """A dict with the ability look up keys by longest prefix match."""
 
     # This Trie class was inspired by James Tauber's Trie class,
     # http://jtabuer.com/2005/02/trie.py.
