@@ -21,11 +21,11 @@ syn.DBPATH = 'webtestdb.sqlite'
 syn.db = dinsd.sqlite_pickle_db.Database(syn.DBPATH)
 #syn.db = dinsd.sqlite_pickle_db.Database(syn.DBPATH, debug_sql=True)
 # Work around the fact that dinsd doesn't persist keys yet.  Having a key on
-# this table is necessary: for some reason if update uses all the fields to
-# look up a record (which it will do if there is no more limited key available)
-# the update's where fails to match and no actual update is done.  A bug in
-# sqlite, perhaps?
+# this table is necessary because the feedparser hash function has a bug
+# in it, so we can't depend on it when doing update and delete operations
+# in sqlite (or indexing).
 syn.db.set_key('articles', {'feedid', 'seqno'})
+print(len(syn.db.r.articles), len(syn.db._system_ns.current['_sys_key_articles']))
 
 def byte_me(iterator):
     for line in iterator:
