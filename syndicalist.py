@@ -207,7 +207,7 @@ def main():
     # this table is necessary because the feedparser hash function has a bug
     # in it, so we can't depend on it when doing update and delete operations
     # in sqlite (or indexing).
-    syn.db.set_key('articles', {'feedid', 'seqno'})
-    print(len(syn.db.r.articles), len(syn.db._system_ns.current['_sys_key_articles']))
+    db.set_key('articles', {'feedid', 'seqno'})
+    print(len(db.r.articles), len(db._system_ns.current['_sys_key_articles']))
 
     return args.subfunc(args)
