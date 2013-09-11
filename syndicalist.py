@@ -154,6 +154,18 @@ def pollfeed(args):
         return
     new_articles(args.feedid, feedblob)
 
+def delfeed(args):
+    with ns(todel=args.feedid):
+        count = len(db.r.articles.where("feedid == todel"))
+        title = (~db.r.feedlist.where("id == todel")).title
+        ans = input("Delete {!r} and {} articles? (y/n): ".format(title, count))
+        if ans != 'y':
+            print('aborting')
+            return
+        db.r.articles.delete("feedid == todel")
+        db.r.feedlist.delete("id == todel")
+        print('Done.')
+
 #
 # Command parsing
 #
@@ -192,6 +204,10 @@ def main():
     sub = sub_parsers.add_parser('pollfeed', help='look for new articles in feed')
     sub.set_defaults(subfunc=pollfeed)
     sub.add_argument('feedid', type=int, help='id of feed to poll')
+
+    sub = sub_parsers.add_parser('delfeed', help='delete a feed')
+    sub.set_defaults(subfunc=delfeed)
+    sub.add_argument('feedid', type=int, help='id of feed to delete')
 
     args = parser.parse_args()
 
