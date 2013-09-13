@@ -169,32 +169,15 @@ def article_prev(environ, respond):
     return _article_nav(environ, respond, 1)
 
 def _article_nav(environ, respond, direction):
-    args = environ['PATH_INFO']
-    try:
-        feedid, seqno = map(int, args.split('/'))
-    except ValueError:
-        respond('404 Not Found', [('Content-Type', 'text/plain')])
-        yield from byte_me(['Invalid articleid id {}'.format(args)])
-        return
+    feedid, seqno, feed, article = _get_article_from_args(environ)
     nextsno = seqno+direction
     with dinsd.ns(fid=feedid, sno=seqno, nextsno=nextsno):
-        feed = syn.db.r.feedlist.where('id == fid')
-        if not feed:
-            respond('404 Not Found', [('Content-Type', 'text/plain')])
-            yield from byte_me(['Feed {} not found in DB'.format(feedid)])
-            return
-        article = syn.db.r.articles.where('feedid==fid and seqno==sno')
-        if not article:
-            respond('404 Not Found', [('Content-Type', 'text/plain')])
-            yield from byte_me(['article {} not found in DB'.format(args)])
-            return
         article = syn.db.r.articles.where('feedid==fid and seqno==nextsno')
         if article:
             nextpage = '/article/nav/markread/{}/{}'.format(feedid, nextsno)
         else:
             nextpage = '/'
-    respond('302 Redirect', [('Location', nextpage)])
-    yield b''
+    raise Redirect(nextpage)
 
 @handles_path('/article/nav/toggleread/', args=True)
 def article_toggleread(environ, respond):
