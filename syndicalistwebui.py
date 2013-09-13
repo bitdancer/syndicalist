@@ -38,7 +38,7 @@ def handles_path(path, args=False):
         if not args:
             @functools.wraps(func)
             def no_args(environ, respond):
-                if environ['PATH_REMAINDER']:
+                if environ['PATH_INFO']:
                     return notfound(environ, respond)
                 return func(environ, respond)
             handler = no_args
@@ -63,8 +63,7 @@ class UpdateThread(threading.Thread):
 def app(environ, respond):
     path = environ['PATH_INFO']
     handler, remainder = paths.get_longest_match(path)
-    # XXX: Should we be modifying PATH_INFO instead?
-    environ['PATH_REMAINDER'] = remainder
+    environ['PATH_INFO'] = remainder
     return handler(environ, respond)
 
 @handles_path('', args=True)
@@ -90,7 +89,7 @@ def articlelist(environ, respond):
         respond('404 Not Found', [('Content-Type', 'text/plain')])
         yield from byte_me(['Invalid query string {}'.format(showall)])
         return
-    args = environ['PATH_REMAINDER']
+    args = environ['PATH_INFO']
     try:
         feedid = int(args)
     except ValueError:
@@ -109,7 +108,7 @@ def articlelist(environ, respond):
 
 @handles_path('/feed/refresh/', args=True)
 def refresh_feed(environ, respond):
-    args = environ['PATH_REMAINDER']
+    args = environ['PATH_INFO']
     try:
         feedid = int(args)
     except ValueError:
@@ -127,7 +126,7 @@ def refresh_feed(environ, respond):
     yield b''
 
 def _change_article_read(environ, respond, changefunc, successurl):
-    args = environ['PATH_REMAINDER']
+    args = environ['PATH_INFO']
     try:
         feedid, seqno = map(int, args.split('/'))
     except ValueError:
@@ -158,7 +157,7 @@ def feed_mark_article_read(environ, respond):
 
 @handles_path('/article/', args=True)
 def article(environ, respond):
-    args = environ['PATH_REMAINDER']
+    args = environ['PATH_INFO']
     try:
         feedid, seqno = map(int, args.split('/'))
     except ValueError:
@@ -196,7 +195,7 @@ def article_prev(environ, respond):
     return _article_nav(environ, respond, 1)
 
 def _article_nav(environ, respond, direction):
-    args = environ['PATH_REMAINDER']
+    args = environ['PATH_INFO']
     try:
         feedid, seqno = map(int, args.split('/'))
     except ValueError:
@@ -241,7 +240,7 @@ def _article_setread(environ, respond, changefunc):
 
 @handles_path('/static/', args=True)
 def static(environ, respond):
-    fn = environ['PATH_REMAINDER']
+    fn = environ['PATH_INFO']
     mimetype = mimetypes.guess_type(fn)[0]
     if os.path.exists(fn):
         respond('200 OK', [('Content-Type', mimetype)])
