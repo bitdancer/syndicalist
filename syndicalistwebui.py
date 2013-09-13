@@ -92,8 +92,7 @@ def feedlist(environ, respond):
 @handles_path('/refresh')
 def refresh_all(environ, respond):
     refresh_feeds()
-    respond('302 Redirect', [('Location', '/')])
-    yield b''
+    raise Redirect('/')
 
 def _get_feed_from_args(feedid):
     try:
