@@ -94,9 +94,10 @@ def refresh_all(environ, respond):
     refresh_feeds()
     raise Redirect('/')
 
-def _get_feed_from_args(feedid):
+def _get_feed_from_args(environ):
+    args = environ['PATH_INFO']
     try:
-        feedid = int(feedid)
+        feedid = int(args)
     except ValueError as err:
         raise NotFound('Invalid feed id {}'.format(args)) from err
     with dinsd.ns(feedid=feedid):
@@ -110,7 +111,7 @@ def articlelist(environ, respond):
     showall = environ['QUERY_STRING']
     if showall and showall != 'showall':
         raise NotFound('Invalid query string {}'.format(showall))
-    feedid, feed = _get_feed_from_args(environ['PATH_INFO'])
+    feedid, feed = _get_feed_from_args(environ)
     respond('200 OK', [('Content-Type', 'text/html; charset=utf-8')])
     return byte_me(page((~feed).title, articlelist_content(feedid, showall)))
 
@@ -120,19 +121,24 @@ def refresh_feed(environ, respond):
     syn.new_articles(feedid, feedparser.parse((~feed).url))
     raise Redirect('/feed/{}'.format(feedid))
 
-def _change_article_read(environ, respond, changefunc, successurl):
+def _get_article_from_args(environ):
     args = environ['PATH_INFO']
     try:
         feedid, seqno = map(int, args.split('/'))
     except ValueError:
         raise NotFound('Invalid articleid id {}'.format(args))
-    with dinsd.ns(fid=feedid, sno=seqno, changefunc=changefunc):
+    with dinsd.ns(fid=feedid, sno=seqno):
         feed = syn.db.r.feedlist.where('id == fid')
         if not feed:
             raise NotFound('Feed {} not found in DB'.format(feedid))
         article = ~syn.db.r.articles.where('feedid==fid and seqno==sno')
         if not article:
             raise NotFound('article {} not found in DB'.format(args))
+    return feedid, seqno, feed, article
+
+def _change_article_read(environ, respond, changefunc, successurl):
+    feedid, seqno, _, _ = _get_article_from_args(environ)
+    with dinsd.ns(fid=feedid, sno=seqno, changefunc=changefunc):
         syn.db.r.articles.update('feedid==fid and seqno==sno',
                                     read="changefunc(read)")
     raise Redirect(successurl.format(feedid=feedid, seqno=seqno))
