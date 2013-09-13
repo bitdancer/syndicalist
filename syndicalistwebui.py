@@ -30,6 +30,9 @@ print(len(syn.db.r.articles), len(syn.db._system_ns.current['_sys_key_articles']
 class NotFound(Exception):
     pass
 
+class Redirect(Exception):
+    pass
+
 def byte_me(iterator):
     for line in iterator:
         yield line.encode('utf-8') + b'\r\n'
@@ -72,6 +75,10 @@ def app(environ, respond):
     except NotFound as err:
         respond('404 Not Found', [('Content-Type', 'text/plain')])
         return byte_me([str(err)])
+    except Redirect as ex:
+        respond('302 Redirect',
+                [('Location', environ['SCRIPT_NAME'] + str(ex))])
+        return [b'']
 
 @handles_path('', args=True)
 def notfound(environ, respond):
@@ -112,8 +119,7 @@ def articlelist(environ, respond):
 def refresh_feed(environ, respond):
     feedid, feed = _get_feed_from_args(environ['PATH_INFO'])
     syn.new_articles(feedid, feedparser.parse((~feed).url))
-    respond('302 Redirect', [('Location', '/feed/{}'.format(feedid))])
-    yield b''
+    raise Redirect('/feed/{}'.format(feedid))
 
 def _change_article_read(environ, respond, changefunc, successurl):
     args = environ['PATH_INFO']
