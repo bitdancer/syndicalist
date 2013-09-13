@@ -125,30 +125,21 @@ def _change_article_read(environ, respond, changefunc, successurl):
     try:
         feedid, seqno = map(int, args.split('/'))
     except ValueError:
-        respond('404 Not Found', [('Content-Type', 'text/plain')])
-        yield from byte_me(['Invalid articleid id {}'.format(args)])
-        return
+        raise NotFound('Invalid articleid id {}'.format(args))
     with dinsd.ns(fid=feedid, sno=seqno, changefunc=changefunc):
         feed = syn.db.r.feedlist.where('id == fid')
         if not feed:
-            respond('404 Not Found', [('Content-Type', 'text/plain')])
-            yield from byte_me(['Feed {} not found in DB'.format(feedid)])
-            return
+            raise NotFound('Feed {} not found in DB'.format(feedid))
         article = ~syn.db.r.articles.where('feedid==fid and seqno==sno')
         if not article:
-            respond('404 Not Found', [('Content-Type', 'text/plain')])
-            yield from byte_me(['article {} not found in DB'.format(args)])
-            return
+            raise NotFound('article {} not found in DB'.format(args))
         syn.db.r.articles.update('feedid==fid and seqno==sno',
                                     read="changefunc(read)")
-    respond('302 Redirect',
-            [('Location', successurl.format(feedid=feedid, seqno=seqno))])
-    yield b''
+    raise Redirect(successurl.format(feedid=feedid, seqno=seqno))
 
 @handles_path('/feed/nav/markread/', args=True)
 def feed_mark_article_read(environ, respond):
-    yield from _change_article_read(environ, respond,
-                                    lambda x: True, '/feed/{feedid}')
+    _change_article_read(environ, respond, lambda x: True, '/feed/{feedid}')
 
 @handles_path('/article/', args=True)
 def article(environ, respond):
@@ -230,8 +221,8 @@ def article_markunread(environ, respond):
     return _article_setread(environ, respond, lambda x: False)
 
 def _article_setread(environ, respond, changefunc):
-    return _change_article_read(environ, respond, changefunc,
-                                '/article/{feedid}/{seqno}')
+    _change_article_read(environ, respond, changefunc,
+                         '/article/{feedid}/{seqno}')
 
 @handles_path('/static/', args=True)
 def static(environ, respond):
