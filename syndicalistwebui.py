@@ -27,6 +27,9 @@ syn.db = dinsd.sqlite_pickle_db.Database(syn.DBPATH)
 syn.db.set_key('articles', {'feedid', 'seqno'})
 print(len(syn.db.r.articles), len(syn.db._system_ns.current['_sys_key_articles']))
 
+class NotFound(Exception):
+    pass
+
 def byte_me(iterator):
     for line in iterator:
         yield line.encode('utf-8') + b'\r\n'
@@ -64,12 +67,15 @@ def app(environ, respond):
     path = environ['PATH_INFO']
     handler, remainder = paths.get_longest_match(path)
     environ['PATH_INFO'] = remainder
-    return handler(environ, respond)
+    try:
+        return handler(environ, respond)
+    except NotFound as err:
+        respond('404 Not Found', [('Content-Type', 'text/plain')])
+        return byte_me([str(err)])
 
 @handles_path('', args=True)
 def notfound(environ, respond):
-    respond('404 Not Found', [('Content-Type', 'text/plain')])
-    return byte_me(['Path {!r} not found'.format(environ['PATH_INFO'])])
+    raise NotFound('Path {!r} not found'.format(environ['PATH_INFO']))
 
 @handles_path('/')
 def feedlist(environ, respond):
@@ -82,45 +88,29 @@ def refresh_all(environ, respond):
     respond('302 Redirect', [('Location', '/')])
     yield b''
 
+def _get_feed_from_args(feedid):
+    try:
+        feedid = int(feedid)
+    except ValueError as err:
+        raise NotFound('Invalid feed id {}'.format(args)) from err
+    with dinsd.ns(feedid=feedid):
+        feed = syn.db.r.feedlist.where('id == feedid')
+        if not feed:
+            raise NotFound('Feed {} not found in DB'.format(feedid))
+    return feedid, feed
+
 @handles_path('/feed/', args=True)
 def articlelist(environ, respond):
     showall = environ['QUERY_STRING']
     if showall and showall != 'showall':
-        respond('404 Not Found', [('Content-Type', 'text/plain')])
-        yield from byte_me(['Invalid query string {}'.format(showall)])
-        return
-    args = environ['PATH_INFO']
-    try:
-        feedid = int(args)
-    except ValueError:
-        respond('404 Not Found', [('Content-Type', 'text/plain')])
-        yield from byte_me(['Invalid feed id {}'.format(args)])
-        return
-    with dinsd.ns(feedid=feedid):
-        feed = syn.db.r.feedlist.where('id == feedid')
-        if not feed:
-            respond('404 Not Found', [('Content-Type', 'text/plain')])
-            yield from byte_me(['Feed {} not found in DB'.format(feedid)])
-            return
+        raise NotFound('Invalid query string {}'.format(showall))
+    feedid, feed = _get_feed_from_args(environ['PATH_INFO'])
     respond('200 OK', [('Content-Type', 'text/html; charset=utf-8')])
-    yield from byte_me(page((~feed).title,
-                            articlelist_content(feedid, showall)))
+    return byte_me(page((~feed).title, articlelist_content(feedid, showall)))
 
 @handles_path('/feed/refresh/', args=True)
 def refresh_feed(environ, respond):
-    args = environ['PATH_INFO']
-    try:
-        feedid = int(args)
-    except ValueError:
-        respond('404 Not Found', [('Content-Type', 'text/plain')])
-        yield from byte_me(['Invalid feed id {}'.format(args)])
-        return
-    with dinsd.ns(feedid=feedid):
-        feed = syn.db.r.feedlist.where('id == feedid')
-        if not feed:
-            respond('404 Not Found', [('Content-Type', 'text/plain')])
-            yield from byte_me(['Feed {} not found in DB'.format(feedid)])
-            return
+    feedid, feed = _get_feed_from_args(environ['PATH_INFO'])
     syn.new_articles(feedid, feedparser.parse((~feed).url))
     respond('302 Redirect', [('Location', '/feed/{}'.format(feedid))])
     yield b''
