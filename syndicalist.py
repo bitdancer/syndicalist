@@ -41,6 +41,7 @@ def new_articles(feedid, feedblob):
             db.r.articles.insert(~new_article)
             new = new | ~new_article
             nextid += 1
+    print(feedblob.feed.get('title', '**Unknown Title**'))
     print(new >> {'title', 'pubdate'})
 
 #
