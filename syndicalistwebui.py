@@ -128,7 +128,7 @@ def _get_article_from_args(environ):
     except ValueError:
         raise NotFound('Invalid articleid id {}'.format(args))
     with dinsd.ns(fid=feedid, sno=seqno):
-        feed = syn.db.r.feedlist.where('id == fid')
+        feed = ~syn.db.r.feedlist.where('id == fid')
         if not feed:
             raise NotFound('Feed {} not found in DB'.format(feedid))
         article = ~syn.db.r.articles.where('feedid==fid and seqno==sno')
@@ -149,34 +149,16 @@ def feed_mark_article_read(environ, respond):
 
 @handles_path('/article/', args=True)
 def article(environ, respond):
-    args = environ['PATH_INFO']
-    try:
-        feedid, seqno = map(int, args.split('/'))
-    except ValueError:
-        respond('404 Not Found', [('Content-Type', 'text/plain')])
-        yield from byte_me(['Invalid articleid id {}'.format(args)])
-        return
-    with dinsd.ns(fid=feedid, sno=seqno):
-        feed = syn.db.r.feedlist.where('id == fid')
-        if not feed:
-            respond('404 Not Found', [('Content-Type', 'text/plain')])
-            yield from byte_me(['Feed {} not found in DB'.format(feedid)])
-            return
-        article = syn.db.r.articles.where('feedid==fid and seqno==sno')
-        if not article:
-            respond('404 Not Found', [('Content-Type', 'text/plain')])
-            yield from byte_me(['article {} not found in DB'.format(args)])
-            return
-    article = ~article
+    feedid, seqno, feed, article = _get_article_from_args(environ)
     if 'content' in article.data:
         content_type = article.data.content[0].type
     else:
         content_type = 'text/html'
     respond('200 OK', [('Content-Type', content_type + '; charset=utf-8')])
-    yield from byte_me(page('{}: {}'.format((~feed).title, article.title),
-                            article_content(article),
-                            h1=(link((~feed).title, '/feed/{}'.format(feedid)) +
-                                ':<br>' + link(article.title, article.link))))
+    return byte_me(page('{}: {}'.format(feed.title, article.title),
+                         article_content(article),
+                         h1=(link(feed.title, '/feed/{}'.format(feedid)) +
+                             ':<br>' + link(article.title, article.link))))
 
 @handles_path('/article/nav/prev/', args=True)
 def article_prev(environ, respond):
